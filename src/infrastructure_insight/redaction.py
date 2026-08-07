@@ -53,7 +53,7 @@ def bound_evidence(
     truncated = len(encoded) > max_inline_bytes
     evidence_path = None
 
-    if truncated and evidence_dir is not None:
+    if evidence_dir is not None:
         evidence_dir.mkdir(parents=True, exist_ok=True)
         timestamp = collected_at.strftime("%Y%m%dT%H%M%S.%fZ")
         evidence_path = (evidence_dir / f"{timestamp}_{target_id}_{action_id}.txt").resolve()

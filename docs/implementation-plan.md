@@ -43,6 +43,9 @@ CLI or optional MCP request
 
 Run the same action IDs against one NX-OS and one OS10 target, deliberately make one target unreachable, and attempt unknown, injected, sensitive, and over-budget requests. The milestone fails if vendor resolution is wrong, one failure erases another result, host trust can be bypassed, or unauthorized input reaches SSH.
 
+Field validation findings and proposed transport-boundary improvements are
+recorded in [Field Validation Feedback](field-validation-feedback.md).
+
 ## Deferred
 
 - Production Redfish support
