@@ -1,5 +1,7 @@
 """Load and query the validated target inventory."""
 
+from __future__ import annotations
+
 from pathlib import Path
 from typing import Any
 
