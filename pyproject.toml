@@ -7,7 +7,7 @@ name = "infrastructure-insight-harness"
 version = "0.1.0"
 description = "Policy-constrained infrastructure evidence collection and validation"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 keywords = ["infrastructure", "network-automation", "evidence", "ssh", "mcp"]
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",
