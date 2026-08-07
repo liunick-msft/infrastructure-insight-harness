@@ -1,0 +1,34 @@
+version: 1
+actions:
+  platform_version:
+    description: Collect platform model, software version, and uptime
+    commands:
+      nxos: show version
+      os10: show version
+  interface_status:
+    description: Collect administrative and operational interface status
+    commands:
+      nxos: show interface status
+      os10: show interface status
+  lldp_neighbors:
+    description: Collect discovered LLDP neighbors
+    commands:
+      nxos: show lldp neighbors
+      os10: show lldp neighbors
+  bgp_summary:
+    description: Collect IPv4 BGP neighbor summary
+    commands:
+      nxos: show bgp ipv4 unicast summary
+      os10: show ip bgp summary
+  running_configuration:
+    description: Collect the full running configuration
+    sensitive: true
+    commands:
+      nxos: show running-config
+      os10: show running-configuration
+  bgp_configuration:
+    description: Collect only the BGP configuration section
+    sensitive: true
+    commands:
+      nxos: show running-config section "^router bgp"
+      os10: show running-configuration bgp

@@ -1,0 +1,36 @@
+version: 1
+profiles:
+  cautious:
+    max_targets: 1
+    max_actions_per_target: 5
+    allow_sensitive_actions: false
+    persist_evidence: false
+    max_inline_bytes: 32768
+    command_timeout_seconds: 30
+    target_timeout_seconds: 120
+    transient_retries: 1
+    login_spacing_seconds: 0.25
+  lab:
+    max_targets: 8
+    max_actions_per_target: 10
+    required_target_tags:
+      - lab
+    allow_sensitive_actions: false
+    persist_evidence: true
+    max_inline_bytes: 32768
+    command_timeout_seconds: 45
+    target_timeout_seconds: 180
+    transient_retries: 1
+    login_spacing_seconds: 0.25
+  audit:
+    max_targets: 1
+    max_actions_per_target: 3
+    required_target_tags:
+      - lab
+    allow_sensitive_actions: true
+    persist_evidence: true
+    max_inline_bytes: 65536
+    command_timeout_seconds: 60
+    target_timeout_seconds: 300
+    transient_retries: 1
+    login_spacing_seconds: 0.25

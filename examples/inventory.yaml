@@ -1,0 +1,16 @@
+version: 1
+targets:
+  - id: os10-leaf01
+    address: 192.0.2.10
+    platform: os10
+    credential_profile: lab
+    tags:
+      - lab
+      - leaf
+  - id: nxos-leaf01
+    address: 192.0.2.20
+    platform: nxos
+    credential_profile: lab
+    tags:
+      - lab
+      - leaf

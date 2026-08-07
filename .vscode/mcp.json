@@ -1,0 +1,9 @@
+{
+  "servers": {
+    "infrastructure-insight": {
+      "type": "stdio",
+      "command": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
+      "args": ["-m", "infrastructure_insight.server"]
+    }
+  }
+}
