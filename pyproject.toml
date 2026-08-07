@@ -19,6 +19,7 @@ classifiers = [
 dependencies = [
     "netmiko>=4.6,<5",
     "pydantic>=2.12,<3",
+    "python-dotenv>=1.1,<2",
     "PyYAML>=6.0,<7",
 ]
 

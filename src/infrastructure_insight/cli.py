@@ -7,7 +7,10 @@ import json
 from pathlib import Path
 import sys
 
+from dotenv import load_dotenv
 from pydantic import ValidationError
+
+load_dotenv()
 
 from .catalog import CatalogError
 from .inventory import InventoryError

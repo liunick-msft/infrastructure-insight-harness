@@ -122,11 +122,22 @@ If connecting to multiple devices, append:
 ssh-keyscan -T 5 -p 22 <SECOND_DEVICE_IP> 2>/dev/null >> known_hosts
 ```
 
-### Step 3: Set credentials as environment variables
+### Step 3: Set credentials in `.env` file
 
-The credential environment variables follow the pattern: `IIH_<PROFILE>_USERNAME` and `IIH_<PROFILE>_PASSWORD` where `<PROFILE>` is the uppercase `credential_profile` from the inventory.
+The CLI automatically loads a `.env` file from the current directory. This file is gitignored and persists across sessions.
 
-For `credential_profile: lab`:
+Write a `.env` file in the repo directory with the credential variables. The pattern is `IIH_<PROFILE>_USERNAME` and `IIH_<PROFILE>_PASSWORD` where `<PROFILE>` is the uppercase `credential_profile` from the inventory.
+
+For `credential_profile: lab`, write this `.env` file:
+
+```
+IIH_LAB_USERNAME=<username>
+IIH_LAB_PASSWORD=<password>
+```
+
+Do NOT quote values or add spaces around `=`. The `.env` file is gitignored — credentials never reach the repository.
+
+Alternatively, credentials can be set as shell environment variables (these override `.env`):
 
 ```bash
 export IIH_LAB_USERNAME="<username>"
