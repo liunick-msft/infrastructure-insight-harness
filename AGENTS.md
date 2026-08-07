@@ -8,6 +8,8 @@ Connects to Cisco NX-OS and Dell OS10 switches via SSH, runs pre-approved read-o
 
 ## Prerequisites (ask the operator for these)
 
+Before setup, collect ALL of the following from the operator in a single prompt. The agent generates all config files — the operator never edits YAML.
+
 | Required Input | Description | Example |
 |---|---|---|
 | Device IP or hostname | The management address of the target switch | `10.1.2.3` |
@@ -74,19 +76,27 @@ source .venv/bin/activate        # Linux/macOS
 
 ### Step 1: Create inventory file
 
-Create `inventory.yaml` with one entry per device. Replace values with operator-provided inputs.
+Ask the operator for: device IP, platform type (os10 or nxos), and SSH port (default 22). Then WRITE the inventory file directly — do not ask the operator to edit YAML manually.
+
+Generate `inventory.yaml` in the repo directory using this template. Replace only the values in angle brackets:
 
 ```yaml
 version: 1
 targets:
-  - id: switch01
-    address: 10.1.2.3
-    platform: os10
+  - id: <DEVICE_HOSTNAME_LOWERCASE>
+    address: <DEVICE_IP>
+    platform: <os10_or_nxos>
     credential_profile: lab
-    port: 22
+    port: <PORT_OR_22>
     tags:
       - lab
 ```
+
+To derive the `id` field: use the device hostname in lowercase, or construct one from the role and number (e.g. `leaf01`, `spine02`). If the operator doesn't provide a name, use the IP with dots replaced by dashes (e.g. `10-1-2-3`).
+
+To add more devices, append entries under `targets:` in the same file.
+
+A pre-filled example is available at `examples/inventory.yaml` for reference.
 
 Rules:
 - `id` must be lowercase alphanumeric with hyphens/underscores, max 64 chars.
