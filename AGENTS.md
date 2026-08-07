@@ -22,16 +22,34 @@ Installation is one-time per workstation. Skip this section if the tool is alrea
 
 ### Check if already installed
 
+First, find an existing clone and activate its venv:
+
 ```bash
-# If this returns a help message, skip to "Setup Steps"
-infrastructure-insight --help
+# Look for existing clone in common locations
+for dir in ~/infrastructure-insight-harness ./infrastructure-insight-harness /opt/infrastructure-insight-harness; do
+    if [ -f "$dir/.venv/bin/activate" ]; then
+        cd "$dir" && source .venv/bin/activate && break
+    fi
+done
+infrastructure-insight --help   # if this works, skip to "Setup Steps"
 ```
 
-On Windows PowerShell, also check:
+On Windows PowerShell:
 ```powershell
-# If the venv exists, just activate it and skip install
-if (Test-Path .\.venv\Scripts\Activate.ps1) { .\.venv\Scripts\Activate.ps1 }
-infrastructure-insight --help
+# Search for existing clone — check common locations
+$searchPaths = @(
+    "$HOME\infrastructure-insight-harness",
+    ".\infrastructure-insight-harness",
+    "C:\WORK\Repo\Github\infrastructure-insight-harness"
+)
+foreach ($dir in $searchPaths) {
+    if (Test-Path "$dir\.venv\Scripts\Activate.ps1") {
+        Set-Location $dir
+        .\.venv\Scripts\Activate.ps1
+        break
+    }
+}
+infrastructure-insight --help   # if this works, skip to "Setup Steps"
 ```
 
 ### First-time install (only if the check above fails)
@@ -44,7 +62,7 @@ source .venv/bin/activate        # Linux/macOS
 python3 -m pip install -e .
 ```
 
-The venv and dependencies persist on disk. On subsequent sessions, only activate the venv:
+The venv is always `.venv/` inside the repo folder. Dependencies persist on disk across sessions. On subsequent sessions, only activate the venv:
 
 ```bash
 cd infrastructure-insight-harness
