@@ -16,7 +16,25 @@ Connects to Cisco NX-OS and Dell OS10 switches via SSH, runs pre-approved read-o
 | SSH password | The password for that account | (operator provides) |
 | SSH port | Default 22 unless non-standard | `22` |
 
-## Installation (run once per workstation)
+## Installation
+
+Installation is one-time per workstation. Skip this section if the tool is already installed.
+
+### Check if already installed
+
+```bash
+# If this returns a help message, skip to "Setup Steps"
+infrastructure-insight --help
+```
+
+On Windows PowerShell, also check:
+```powershell
+# If the venv exists, just activate it and skip install
+if (Test-Path .\.venv\Scripts\Activate.ps1) { .\.venv\Scripts\Activate.ps1 }
+infrastructure-insight --help
+```
+
+### First-time install (only if the check above fails)
 
 ```bash
 git clone <REPO_URL> && cd infrastructure-insight-harness
@@ -24,6 +42,14 @@ python3 -m venv .venv
 source .venv/bin/activate        # Linux/macOS
 # OR on Windows PowerShell: .\.venv\Scripts\Activate.ps1
 python3 -m pip install -e .
+```
+
+The venv and dependencies persist on disk. On subsequent sessions, only activate the venv:
+
+```bash
+cd infrastructure-insight-harness
+source .venv/bin/activate        # Linux/macOS
+# OR on Windows PowerShell: .\.venv\Scripts\Activate.ps1
 ```
 
 ## Setup Steps (run once per target device)
