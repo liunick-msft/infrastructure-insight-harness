@@ -101,6 +101,50 @@ class CatalogDocument(BaseModel):
         return actions
 
 
+class Playbook(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    description: str = Field(min_length=1, max_length=200)
+    platforms: frozenset[Platform]
+    action_ids: tuple[str, ...] = Field(min_length=1)
+    covered_action_ids: frozenset[str] = frozenset()
+
+    @field_validator("action_ids", "covered_action_ids")
+    @classmethod
+    def validate_action_ids(
+        cls, values: tuple[str, ...] | frozenset[str]
+    ) -> tuple[str, ...] | frozenset[str]:
+        if any(not IDENTIFIER_PATTERN.fullmatch(value) for value in values):
+            raise ValueError("playbook action IDs must be lowercase identifiers")
+        return values
+
+    @model_validator(mode="after")
+    def validate_playbook(self) -> Playbook:
+        if not self.platforms:
+            raise ValueError("at least one playbook platform is required")
+        if set(self.action_ids) & self.covered_action_ids:
+            raise ValueError("covered actions cannot also be requested")
+        return self
+
+
+class PlaybookDocument(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    version: int = Field(ge=1)
+    playbooks: dict[str, Playbook]
+
+    @field_validator("playbooks")
+    @classmethod
+    def validate_playbook_ids(cls, playbooks: dict[str, Playbook]) -> dict[str, Playbook]:
+        if not playbooks:
+            raise ValueError("at least one playbook is required")
+        if any(
+            not IDENTIFIER_PATTERN.fullmatch(playbook_id) for playbook_id in playbooks
+        ):
+            raise ValueError("playbook IDs must be lowercase identifiers")
+        return playbooks
+
+
 class InventoryDocument(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -180,6 +224,33 @@ class PreflightTarget(BaseModel):
     ready: bool
 
 
+class PlannedCommand(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    sequence: int = Field(ge=1)
+    target_id: str
+    target_address: str
+    target_port: int = Field(ge=1, le=65535)
+    platform: Platform
+    action_id: str
+    command: str
+    description: str
+    sensitive: bool
+
+
+class ExecutionPlan(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    plan_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    playbook_id: str
+    playbook_version: int = Field(ge=1)
+    catalog_version: int = Field(ge=1)
+    profile_id: str
+    action_ids: tuple[str, ...]
+    covered_action_ids: tuple[str, ...]
+    commands: tuple[PlannedCommand, ...]
+
+
 class ActionResult(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -192,8 +263,11 @@ class ActionResult(BaseModel):
     error: str | None = None
     byte_count: int = Field(default=0, ge=0)
     sha256: str | None = None
+    raw_byte_count: int = Field(default=0, ge=0)
+    raw_sha256: str | None = None
     truncated: bool = False
     evidence_path: Path | None = None
+    raw_evidence_path: Path | None = None
 
 
 class RunResult(BaseModel):
@@ -202,3 +276,5 @@ class RunResult(BaseModel):
     started_at: datetime
     completed_at: datetime
     results: tuple[ActionResult, ...]
+    evidence_dir: Path | None = None
+    manifest_path: Path | None = None

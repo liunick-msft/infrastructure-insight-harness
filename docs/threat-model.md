@@ -13,7 +13,7 @@ Collect bounded infrastructure evidence without allowing a caller, AI client, or
 | Caller or AI adapter | Untrusted beyond typed IDs | No command, credential, profile, or path inputs |
 | Network and device | Network is hostile; device output may contain secrets | Strict host keys, timeouts, redaction, bounds |
 | Credential store | Process environment is locally controlled | Named profiles, no logging or request inputs |
-| Evidence store | Local filesystem may outlive a run | Disabled by default, explicit path, redacted writes |
+| Evidence store | Local filesystem may outlive a run | Profile-gated persistence, current-user-only session directory, raw and redacted hashes |
 
 ## Threats and Mitigations
 
@@ -23,7 +23,8 @@ Collect bounded infrastructure evidence without allowing a caller, AI client, or
 | Unauthorized breadth | Profile target/action budgets and required tags | An authorized action can still expose broad operational data |
 | Host impersonation | Strict pinned SSH host-key verification | Initial fingerprint verification remains an operator responsibility |
 | Credential disclosure | Environment-only credentials, no credential inputs or logs | Other privileged local processes may inspect environment variables |
-| Secret-bearing output | Redaction before hashing, truncation, or persistence | Pattern-based redaction cannot prove removal of every secret format |
+| Secret-bearing output | Redacted and bounded API output; profile-gated raw evidence in a current-user-only local directory | Raw evidence deliberately retains device secrets and must be protected and deleted according to operator policy |
+| Evidence tampering or ambiguity | Manifest records endpoint, exact command, timestamps, states, and raw/redacted hashes | A privileged local process can still alter evidence or the harness |
 | Resource exhaustion | Sequential execution, command/target timeouts, bounded retry and output | Large valid fleets require deliberate profile changes and remain sequential |
 | AI overclaiming | Collection state is separate from deterministic evaluation state | Consumers must preserve the result semantics |
 | Policy bypass through MCP | Profile is local environment configuration, not a tool argument | A user who controls the local process environment controls its policy |

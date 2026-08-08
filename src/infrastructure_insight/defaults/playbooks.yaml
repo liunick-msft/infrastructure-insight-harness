@@ -1,0 +1,13 @@
+version: 1
+playbooks:
+  bgp_health:
+    description: Compare configured BGP state with operational and physical connectivity evidence
+    platforms:
+      - os10
+    action_ids:
+      - running_configuration
+      - bgp_summary
+      - interface_status
+      - lldp_neighbors
+    covered_action_ids:
+      - bgp_configuration

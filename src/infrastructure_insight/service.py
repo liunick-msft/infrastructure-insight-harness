@@ -3,15 +3,27 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
+import json
 import os
 from pathlib import Path
+import tempfile
 
 from paramiko.hostkeys import HostKeys, InvalidHostKey
 
 from .catalog import ActionCatalog
 from .credentials import CredentialError, EnvironmentCredentialProvider
 from .inventory import Inventory
-from .models import ExecutionPolicy, PreflightTarget, RunRequest, RunResult, Target
+from .models import (
+    ExecutionPlan,
+    ExecutionPolicy,
+    PlannedCommand,
+    PreflightTarget,
+    RunRequest,
+    RunResult,
+    Target,
+)
+from .playbooks import PlaybookCatalog, PlaybookError
 from .policy import PolicyError, PolicyProfiles
 from .runner import InsightRunner
 from .ssh import NetmikoTransport
@@ -31,6 +43,7 @@ class RuntimePaths:
     evidence_dir: Path | None
     catalog: Path = DEFAULTS_DIR / "actions.yaml"
     profiles: Path = DEFAULTS_DIR / "profiles.yaml"
+    playbooks: Path = DEFAULTS_DIR / "playbooks.yaml"
     profile_id: str = "cautious"
 
     @classmethod
@@ -47,6 +60,7 @@ class RuntimePaths:
             evidence_dir=Path(evidence_value) if evidence_value else None,
             catalog=Path(os.environ.get("IIH_CATALOG", DEFAULTS_DIR / "actions.yaml")),
             profiles=Path(os.environ.get("IIH_PROFILES", DEFAULTS_DIR / "profiles.yaml")),
+            playbooks=Path(os.environ.get("IIH_PLAYBOOKS", DEFAULTS_DIR / "playbooks.yaml")),
             profile_id=os.environ.get("IIH_PROFILE", "cautious"),
         )
 
@@ -56,6 +70,7 @@ class InsightService:
         self.paths = paths
         self.inventory = Inventory.load(paths.inventory)
         self.catalog = ActionCatalog.load(paths.catalog)
+        self.playbooks = PlaybookCatalog.load(paths.playbooks)
         self.policy = PolicyProfiles.load(paths.profiles).require(paths.profile_id)
         self.credentials = EnvironmentCredentialProvider()
 
@@ -82,6 +97,78 @@ class InsightService:
             for action_id, action in self.catalog.list_actions().items()
         ]
 
+    def list_playbooks(self) -> list[dict[str, object]]:
+        return [
+            {
+                "id": playbook_id,
+                "description": playbook.description,
+                "platforms": sorted(platform.value for platform in playbook.platforms),
+                "actions": list(playbook.action_ids),
+                "covered_actions": sorted(playbook.covered_action_ids),
+            }
+            for playbook_id, playbook in self.playbooks.list_playbooks().items()
+        ]
+
+    def plan_playbook(self, playbook_id: str, target_ids: tuple[str, ...]) -> ExecutionPlan:
+        targets = tuple(self.inventory.require(target_id) for target_id in target_ids)
+        if not targets:
+            raise PlaybookError("at least one target is required")
+
+        platform = targets[0].platform
+        if any(target.platform != platform for target in targets):
+            raise PlaybookError("a playbook plan cannot mix target platforms")
+
+        action_ids = self.playbooks.expand(playbook_id, platform, self.catalog)
+        request = RunRequest(target_ids=target_ids, action_ids=action_ids)
+        self._authorize(request, self.policy)
+        playbook = self.playbooks.require(playbook_id)
+
+        commands = tuple(
+            PlannedCommand(
+                sequence=sequence,
+                target_id=target.id,
+                target_address=target.address,
+                target_port=target.port,
+                platform=target.platform,
+                action_id=action_id,
+                command=self.catalog.resolve(action_id, target.platform),
+                description=self.catalog.require(action_id).description,
+                sensitive=self.catalog.require(action_id).sensitive,
+            )
+            for sequence, (target, action_id) in enumerate(
+                (
+                    (target, action_id)
+                    for target in targets
+                    for action_id in action_ids
+                ),
+                start=1,
+            )
+        )
+        digest_input = {
+            "playbook_id": playbook_id,
+            "playbook_version": self.playbooks.version,
+            "catalog_version": self.catalog.version,
+            "profile_id": self.paths.profile_id,
+            "commands": [command.model_dump(mode="json") for command in commands],
+        }
+        plan_sha256 = hashlib.sha256(
+            json.dumps(digest_input, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+        return ExecutionPlan(
+            plan_sha256=plan_sha256,
+            playbook_id=playbook_id,
+            playbook_version=self.playbooks.version,
+            catalog_version=self.catalog.version,
+            profile_id=self.paths.profile_id,
+            action_ids=action_ids,
+            covered_action_ids=tuple(sorted(playbook.covered_action_ids)),
+            commands=commands,
+        )
+
+    def run_playbook(self, playbook_id: str, target_ids: tuple[str, ...]) -> RunResult:
+        plan = self.plan_playbook(playbook_id, target_ids)
+        return self.run(RunRequest(target_ids=target_ids, action_ids=plan.action_ids))
+
     def preflight(self, target_ids: tuple[str, ...] | None = None) -> tuple[PreflightTarget, ...]:
         targets = (
             tuple(self.inventory.require(target_id) for target_id in target_ids)
@@ -105,13 +192,16 @@ class InsightService:
 
     def run(self, request: RunRequest) -> RunResult:
         self._authorize(request, self.policy)
+        evidence_dir = self.paths.evidence_dir
+        if self.policy.persist_evidence and evidence_dir is None:
+            evidence_dir = Path(tempfile.gettempdir()) / "infrastructure-insight"
         transport = NetmikoTransport(self.paths.known_hosts)
         runner = InsightRunner(
             self.inventory,
             self.catalog,
             self.credentials,
             transport,
-            evidence_dir=self.paths.evidence_dir if self.policy.persist_evidence else None,
+            evidence_dir=evidence_dir if self.policy.persist_evidence else None,
             max_inline_bytes=self.policy.max_inline_bytes,
             read_timeout=self.policy.command_timeout_seconds,
             target_timeout=self.policy.target_timeout_seconds,

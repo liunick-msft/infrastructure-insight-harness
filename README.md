@@ -31,7 +31,7 @@ Human or script                 AI client
 										|
 					 Sequential SSH executor
 										|
-					Redact -> bound -> hash -> report
+                    Raw session evidence + redact -> bound -> hash -> report
 										|
 				Optional deterministic evaluation
 ```
@@ -43,14 +43,14 @@ MCP does not grant additional authority. Both interfaces call the same applicati
 - Review infrastructure access as data and policy instead of free-form scripts.
 - Preserve useful results when one target or action fails.
 - Apply the same limits to a human operator, automation, or probabilistic AI.
-- Produce bounded, attributable evidence without logging credentials or raw secrets.
+- Produce bounded, attributable API output without logging credentials or authentication exchanges.
 - Add deterministic assertions later without allowing AI inference to become pass/fail truth.
 
 ## CLI Quick Start
 
 ### PowerShell (Windows)
 
-Use Python 3.10 or later from PowerShell.
+Use Python 3.11 or later from PowerShell.
 
 ```powershell
 python -m venv .venv
@@ -94,7 +94,7 @@ infrastructure-insight --inventory .\examples\inventory.yaml `
 
 ### Bash (Linux / macOS)
 
-Use Python 3.10 or later.
+Use Python 3.11 or later.
 
 ```bash
 python3 -m venv .venv
@@ -170,7 +170,7 @@ infrastructure-insight --inventory ./examples/inventory.yaml \
     --actions running_configuration
 ```
 
-The harness redacts known secret patterns (passwords, SNMP communities, authentication keys) before hashing or persisting. The output JSON reports `collection_state`, a SHA-256 hash of the redacted content, byte count, and whether the inline output was truncated. When `--evidence-dir` is set and the profile permits persistence, the full redacted output is also written to the evidence directory.
+The API output is redacted and bounded. Persistence-enabled profiles also create a current-user-only session directory containing exact raw device output, redacted output, both hashes, and a command manifest. Raw configuration is sensitive and may contain secrets that pattern-based redaction cannot recognize. When `--evidence-dir` is omitted, sessions are written under the system temporary directory's `infrastructure-insight` folder.
 
 > [!NOTE]
 > The `cautious` and `lab` profiles both deny sensitive actions. The `audit` profile allows sensitive actions but limits scope to one `lab`-tagged target and at most three actions per run.
@@ -242,26 +242,49 @@ infrastructure-insight --inventory ./examples/inventory.yaml \
 
 The `collection_state` tells you whether data was obtained. `validation_state` remains `unknown` because no deterministic evaluator is contributed yet — the operator interprets the BGP output to confirm peer state. If one target is unreachable, its result shows `transport_error` or `timeout` while the other target's results are preserved.
 
+### Use Case 3: Plan and Run OS10 BGP Health Collection
+
+The reviewed `bgp_health` playbook collects full running configuration once, then BGP summary, interface status, and LLDP neighbors. The full configuration covers `bgp_configuration`, so that narrower command is not executed. Planning performs policy checks and prints exact endpoint-bound commands without reading credentials, host keys, or opening SSH.
+
+```powershell
+infrastructure-insight --inventory .\inventory.yaml `
+    --profile diagnostic_audit plan-playbook `
+    --playbook bgp_health --targets b25tor1 b25tor2
+```
+
+After reviewing the plan and `plan_sha256`, run the same reviewed playbook:
+
+```powershell
+infrastructure-insight --inventory .\inventory.yaml `
+    --known-hosts .\known_hosts `
+    --profile diagnostic_audit `
+    --evidence-dir .\evidence run-playbook `
+    --playbook bgp_health --targets b25tor1 b25tor2
+```
+
+This first playbook is OS10-only and collects evidence; it does not yet parse peers or produce deterministic BGP findings. `validation_state` therefore remains `unknown`.
+
 ## Configuration
 
-The operator owns the inventory and selected execution profile. The package supplies reviewed default actions and profiles; either can be replaced with an explicit file.
+The operator owns the inventory and selected execution profile. The package supplies reviewed default actions, profiles, and playbooks; each can be replaced with an explicit file.
 
 | Input | CLI option | MCP environment | Default |
 |---|---|---|---|
 | Inventory | `--inventory` | `IIH_INVENTORY` | Required |
 | Action catalog | `--catalog` | `IIH_CATALOG` | Packaged catalog |
 | Profile catalog | `--profiles` | `IIH_PROFILES` | Packaged profiles |
+| Playbook catalog | `--playbooks` | `IIH_PLAYBOOKS` | Packaged playbooks |
 | Selected profile | `--profile` | `IIH_PROFILE` | `cautious` |
 | Known hosts | `--known-hosts` | `IIH_KNOWN_HOSTS` | User SSH known-hosts |
-| Evidence directory | `--evidence-dir` | `IIH_EVIDENCE_DIR` | Disabled |
+| Evidence directory | `--evidence-dir` | `IIH_EVIDENCE_DIR` | System temporary directory when persistence is enabled |
 
-The cautious profile allows one target, at most five actions, no sensitive actions, sequential execution, one transient retry, and no evidence files. The lab profile allows up to eight `lab`-tagged targets and ten actions. The audit profile allows one `lab`-tagged target and up to three actions including sensitive actions such as `running_configuration`, with evidence persistence and a higher inline-byte limit. Lab and audit still cannot bypass catalog authorization, strict host keys, redaction, timeouts, or evidence bounds. Evidence files require both a profile that permits persistence and an explicit directory.
+The cautious profile allows one target, at most five actions, no sensitive actions, sequential execution, one transient retry, and no evidence files. The lab profile allows up to eight `lab`-tagged targets and ten actions. The audit profile allows one `lab`-tagged target and up to three actions including sensitive actions. The `diagnostic_audit` profile allows two `lab`-tagged targets and four actions for the reviewed BGP workflow. Persistence-enabled profiles use the explicit evidence directory or a system temporary fallback. Profiles cannot bypass catalog authorization, strict host keys, redaction, timeouts, or evidence bounds.
 
 ## Result Semantics
 
 `collection_state` says whether evidence was obtained or why collection failed. `validation_state` remains `unknown` until a contributed deterministic evaluator produces a result. AI can explain evidence, but it cannot manufacture a pass or fail.
 
-The SHA-256 value covers the redacted evidence bytes, not the raw device response. Inline output is bounded; optional persisted output is redacted before it is written.
+`sha256` covers redacted evidence; `raw_sha256` covers the exact device response. Inline output is redacted and bounded. Persisted session data includes sensitive `raw.txt`, `redacted.txt`, and `manifest.json` files. The harness restricts each session directory to the current user and aborts if that restriction cannot be applied. Credentials and SSH authentication exchanges are not evidence and are never written.
 
 ## Optional MCP Adapter
 

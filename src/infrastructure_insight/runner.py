@@ -3,11 +3,17 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+import csv
 from datetime import UTC, datetime
+import io
+import json
+import os
 from pathlib import Path
 import re
+import subprocess
 import time
 from typing import Protocol
+from uuid import uuid4
 
 from .catalog import ActionCatalog
 from .credentials import CredentialError, Credentials
@@ -73,6 +79,7 @@ class InsightRunner:
 
     def run(self, request: RunRequest) -> RunResult:
         started_at = datetime.now(UTC)
+        session_evidence_dir = self._create_session_evidence_dir(started_at)
         targets = tuple(self.inventory.require(target_id) for target_id in request.target_ids)
         actions = tuple(
             (action_id, self.catalog.require(action_id)) for action_id in request.action_ids
@@ -202,10 +209,20 @@ class InsightRunner:
             finally:
                 session.close()
 
+        completed_at = datetime.now(UTC)
+        manifest_path = self._write_manifest(
+            request,
+            started_at,
+            completed_at,
+            tuple(results),
+            session_evidence_dir,
+        )
         return RunResult(
             started_at=started_at,
-            completed_at=datetime.now(UTC),
+            completed_at=completed_at,
             results=tuple(results),
+            evidence_dir=session_evidence_dir,
+            manifest_path=manifest_path,
         )
 
     def _open_with_spacing(self, target: Target, credential: Credentials) -> Session:
@@ -222,7 +239,7 @@ class InsightRunner:
         evidence = bound_evidence(
             output,
             max_inline_bytes=self.max_inline_bytes,
-            evidence_dir=self.evidence_dir,
+            evidence_dir=self._session_evidence_dir,
             target_id=target_id,
             action_id=action_id,
             collected_at=collected_at,
@@ -237,9 +254,107 @@ class InsightRunner:
             output=evidence.output,
             byte_count=evidence.byte_count,
             sha256=evidence.sha256,
+            raw_byte_count=evidence.raw_byte_count,
+            raw_sha256=evidence.raw_sha256,
             truncated=evidence.truncated,
             evidence_path=evidence.evidence_path,
+            raw_evidence_path=evidence.raw_evidence_path,
         )
+
+    def _create_session_evidence_dir(self, started_at: datetime) -> Path | None:
+        if self.evidence_dir is None:
+            self._session_evidence_dir = None
+            return None
+        session_id = f"{started_at.strftime('%Y%m%dT%H%M%S.%fZ')}_{uuid4().hex}"
+        session_dir = (self.evidence_dir / session_id).resolve()
+        session_dir.mkdir(parents=True, exist_ok=False)
+        self._secure_session_directory(session_dir)
+        self._session_evidence_dir = session_dir
+        return session_dir
+
+    @staticmethod
+    def _secure_session_directory(session_dir: Path) -> None:
+        if os.name != "nt":
+            os.chmod(session_dir, 0o700)
+            return
+
+        try:
+            identity = subprocess.run(
+                ["whoami", "/user", "/fo", "csv", "/nh"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            row = next(csv.reader(io.StringIO(identity.stdout)))
+            user_sid = row[1].strip()
+            subprocess.run(
+                [
+                    "icacls",
+                    str(session_dir),
+                    "/inheritance:r",
+                    "/grant:r",
+                    f"*{user_sid}:(OI)(CI)F",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except (IndexError, OSError, StopIteration, subprocess.CalledProcessError) as exc:
+            raise PermissionError(
+                f"cannot restrict evidence directory to the current user: {session_dir}"
+            ) from exc
+
+    def _write_manifest(
+        self,
+        request: RunRequest,
+        started_at: datetime,
+        completed_at: datetime,
+        results: tuple[ActionResult, ...],
+        session_evidence_dir: Path | None,
+    ) -> Path | None:
+        if session_evidence_dir is None:
+            return None
+        targets = {
+            target_id: self.inventory.require(target_id) for target_id in request.target_ids
+        }
+        manifest = {
+            "started_at": started_at.isoformat(),
+            "completed_at": completed_at.isoformat(),
+            "catalog_version": self.catalog.version,
+            "commands": [
+                {
+                    "sequence": sequence,
+                    "target_id": result.target_id,
+                    "target_address": targets[result.target_id].address,
+                    "target_port": targets[result.target_id].port,
+                    "platform": targets[result.target_id].platform.value,
+                    "action_id": result.action_id,
+                    "command": self.catalog.resolve(
+                        result.action_id, targets[result.target_id].platform
+                    ),
+                    "collection_state": result.collection_state.value,
+                    "collected_at": result.collected_at.isoformat(),
+                    "raw_byte_count": result.raw_byte_count,
+                    "raw_sha256": result.raw_sha256,
+                    "raw_evidence_path": (
+                        str(result.raw_evidence_path) if result.raw_evidence_path else None
+                    ),
+                    "redacted_byte_count": result.byte_count,
+                    "redacted_sha256": result.sha256,
+                    "redacted_evidence_path": (
+                        str(result.evidence_path) if result.evidence_path else None
+                    ),
+                    "error": result.error,
+                }
+                for sequence, result in enumerate(results, start=1)
+            ],
+        }
+        manifest_path = session_evidence_dir / "manifest.json"
+        temporary_path = session_evidence_dir / ".manifest.json.tmp"
+        temporary_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+        os.chmod(temporary_path, 0o600)
+        temporary_path.replace(manifest_path)
+        return manifest_path.resolve()
 
     @staticmethod
     def _state_for_exception(exc: Exception) -> CollectionState:
