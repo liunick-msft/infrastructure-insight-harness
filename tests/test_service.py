@@ -199,3 +199,96 @@ actions:
         assert "missing profile-required tags: lab" in str(exc)
     else:
         raise AssertionError("untagged target was not rejected")
+
+
+def test_bgp_health_plan_lists_exact_commands_without_transport(tmp_path: Path) -> None:
+    inventory = tmp_path / "inventory.yaml"
+    inventory.write_text(
+        """
+version: 1
+targets:
+  - id: tor1
+    address: 192.0.2.10
+    platform: os10
+    credential_profile: lab
+    tags: [lab]
+  - id: tor2
+    address: 192.0.2.11
+    platform: os10
+    credential_profile: lab
+    tags: [lab]
+""",
+        encoding="utf-8",
+    )
+    service = InsightService(
+        RuntimePaths(
+            inventory=inventory,
+            known_hosts=tmp_path / "missing_known_hosts",
+            evidence_dir=None,
+            profile_id="diagnostic_audit",
+        )
+    )
+
+    plan = service.plan_playbook("bgp_health", ("tor1", "tor2"))
+
+    assert plan.action_ids == (
+        "running_configuration",
+        "bgp_summary",
+        "interface_status",
+        "lldp_neighbors",
+    )
+    assert plan.covered_action_ids == ("bgp_configuration",)
+    assert plan.commands[0].target_address == "192.0.2.10"
+    assert plan.commands[0].target_port == 22
+    assert [item.command for item in plan.commands] == [
+        "show running-configuration",
+        "show ip bgp summary",
+        "show interface status",
+        "show lldp neighbors",
+        "show running-configuration",
+        "show ip bgp summary",
+        "show interface status",
+        "show lldp neighbors",
+    ]
+    assert len(plan.plan_sha256) == 64
+
+
+def test_run_playbook_executes_only_planned_actions(tmp_path: Path, monkeypatch) -> None:
+    inventory = tmp_path / "inventory.yaml"
+    inventory.write_text(
+        """
+version: 1
+targets:
+  - id: tor1
+    address: 192.0.2.10
+    platform: os10
+    credential_profile: lab
+    tags: [lab]
+""",
+        encoding="utf-8",
+    )
+    service = InsightService(
+        RuntimePaths(
+            inventory=inventory,
+            known_hosts=tmp_path / "known_hosts",
+            evidence_dir=tmp_path / "evidence",
+            profile_id="diagnostic_audit",
+        )
+    )
+    captured: dict[str, RunRequest] = {}
+
+    def fake_run(request: RunRequest):
+        captured["request"] = request
+        return "result"
+
+    monkeypatch.setattr(service, "run", fake_run)
+
+    result = service.run_playbook("bgp_health", ("tor1",))
+
+    assert result == "result"
+    assert captured["request"].action_ids == (
+        "running_configuration",
+        "bgp_summary",
+        "interface_status",
+        "lldp_neighbors",
+    )

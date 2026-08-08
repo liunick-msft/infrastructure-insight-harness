@@ -28,6 +28,8 @@ def test_oversized_evidence_is_hashed_truncated_and_spilled(tmp_path) -> None:
     assert evidence.truncated is True
     assert evidence.evidence_path is not None
     assert evidence.evidence_path.read_text(encoding="utf-8") == "0123456789"
+    assert evidence.raw_evidence_path is not None
+    assert evidence.raw_evidence_path.read_text(encoding="utf-8") == "0123456789"
 
 
 def test_evidence_is_persisted_when_inline_output_is_not_truncated(tmp_path) -> None:
@@ -44,3 +46,7 @@ def test_evidence_is_persisted_when_inline_output_is_not_truncated(tmp_path) -> 
     assert evidence.truncated is False
     assert evidence.evidence_path is not None
     assert evidence.evidence_path.read_text(encoding="utf-8") == evidence.output
+    assert evidence.raw_evidence_path is not None
+    assert evidence.raw_evidence_path.read_text(encoding="utf-8") == (
+        "username operator password cleartext"
+    )

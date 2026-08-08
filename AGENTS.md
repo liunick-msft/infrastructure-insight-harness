@@ -172,6 +172,23 @@ Profiles control how many targets/actions are allowed per run.
 | `cautious` (default) | 1 | 5 | No | No |
 | `lab` | 8 | 10 | No | Yes |
 | `audit` | 1 | 3 | **Yes** | Yes |
+| `diagnostic_audit` | 2 | 4 | **Yes** | Yes |
+
+## Available Playbooks
+
+| Playbook ID | Platforms | Actions | Covered Without Duplicate Collection |
+|---|---|---|---|
+| `bgp_health` | OS10 | `running_configuration`, `bgp_summary`, `interface_status`, `lldp_neighbors` | `bgp_configuration` |
+
+Always preview a playbook before execution. Planning performs policy checks and reveals exact commands without accessing credentials or the network.
+
+```bash
+infrastructure-insight --inventory ./inventory.yaml \
+  --profile diagnostic_audit plan-playbook \
+  --playbook bgp_health --targets switch01 switch02
+```
+
+The playbook currently collects evidence only. It does not produce BGP findings, so `validation_state` remains `unknown`.
 
 ## Running Commands
 
@@ -220,6 +237,18 @@ infrastructure-insight --inventory ./inventory.yaml \
     --targets switch01 switch02 \
     --actions bgp_summary lldp_neighbors
 ```
+
+### Run the reviewed OS10 BGP health collection
+
+```bash
+infrastructure-insight --inventory ./inventory.yaml \
+    --known-hosts ./known_hosts \
+    --profile diagnostic_audit \
+    --evidence-dir ./evidence run-playbook \
+    --playbook bgp_health --targets switch01 switch02
+```
+
+Persistence-enabled profiles create one secured session directory. It contains sensitive exact `raw.txt` responses, redacted responses, hashes, and `manifest.json`; credentials and authentication exchanges are never recorded. Without `--evidence-dir`, the system temporary directory is used.
 
 ### List available targets
 

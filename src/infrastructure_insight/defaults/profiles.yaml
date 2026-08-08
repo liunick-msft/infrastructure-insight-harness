@@ -34,3 +34,15 @@ profiles:
     target_timeout_seconds: 300
     transient_retries: 1
     login_spacing_seconds: 0.25
+  diagnostic_audit:
+    max_targets: 2
+    max_actions_per_target: 4
+    required_target_tags:
+      - lab
+    allow_sensitive_actions: true
+    persist_evidence: true
+    max_inline_bytes: 65536
+    command_timeout_seconds: 60
+    target_timeout_seconds: 300
+    transient_retries: 1
+    login_spacing_seconds: 0.25

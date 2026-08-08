@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 
 import pytest
 from pydantic import ValidationError
@@ -199,3 +200,23 @@ def test_transient_disconnect_retries_current_action_once() -> None:
     assert transport.opened == ["os10-leaf", "os10-leaf"]
     assert result.results[0].collection_state == CollectionState.SUCCESS
     assert result.results[0].output == "recovered"
+
+
+def test_run_persists_raw_redacted_evidence_and_command_manifest(tmp_path: Path) -> None:
+    runner = make_runner(FakeTransport())
+    runner.evidence_dir = tmp_path
+
+    result = runner.run(
+        RunRequest(target_ids=("os10-leaf",), action_ids=("platform_version",))
+    )
+
+    action_result = result.results[0]
+    assert result.evidence_dir is not None
+    assert result.manifest_path is not None
+    assert action_result.raw_evidence_path is not None
+    assert action_result.raw_evidence_path.read_text(encoding="utf-8") == "version from os10"
+    assert action_result.evidence_path is not None
+    assert action_result.evidence_path.read_text(encoding="utf-8") == "version from os10"
+    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    assert manifest["commands"][0]["command"] == "show version"
+    assert manifest["commands"][0]["raw_sha256"] == action_result.raw_sha256
